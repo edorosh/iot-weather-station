@@ -4,6 +4,7 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <DHT.h>
+#include <ArduinoJson.h>
 
 #define DHTPIN 13     // Digital pin connected to the DHT sensor
 // Feather HUZZAH ESP8266 note: use pins 3, 4, 5, 12, 13 or 14 --
@@ -135,6 +136,9 @@ void loop() {
 
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval) {
+    const size_t capacity = JSON_OBJECT_SIZE(2);
+    StaticJsonDocument<capacity> doc;
+
     // save the last time you updated the DHT values
     previousMillis = currentMillis;
     
@@ -155,8 +159,24 @@ void loop() {
     Serial.print(F("%  Temperature: "));
     Serial.print(t);
     Serial.println(F("°C "));
-    
-    client.publish("weatherStation/temperature", String(t).c_str(), true);
-    client.publish("weatherStation/humidity", String(h).c_str(), true);
+
+    doc["temperature"] = t;
+    doc["humidity"] = h;
+
+    char JSONmessageBuffer[100];
+
+    Serial.println("\nPretty JSON message: ");
+    serializeJsonPretty(doc, Serial);
+
+    char buffer[256];
+    size_t n = serializeJson(doc, buffer);
+
+    if (client.publish("weatherStation/data", buffer, n) == true) {
+        Serial.println("Success sending message");
+    } else {
+        Serial.println("Error sending message");
+    }
+
+    Serial.println("-------------");
   }
 }
