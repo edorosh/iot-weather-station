@@ -1,0 +1,38 @@
+// Print debug logs to Serial {TRUE/FALSE}
+#define DEBUG TRUE
+
+// WiFi Network configuration
+#define STASSID ""
+#define STAPSK ""
+
+// Static network configuration
+#define IPADDRESS_CONFIG ip(192, 168, 0, 100)
+#define GATEWAY_CONFIG gateway(192, 168, 0, 1)
+// Network mask
+#define SUBNET_CONFIG subnet(255, 255, 255, 0)
+
+// MQTT server configuration
+#define MQTTSERVER "192.168.0.54"
+#define MQTTPORT 1883
+#define MQTT_CLIENT_NAME "arduino_temperature_sensor"
+#define CONNECT_MQTT_TIMEOUT_MICRO_SECONDS 5000
+
+// Digital pin connected to the DHT sensor
+#define DHTPIN 13
+// ESP8266 note: use pins 3, 4, 5, 12, 13 or 14 --
+// Pin 15 can work but DHT must be disconnected during program upload.
+
+// wait timeout in micro seconds to let DHT sensor booting after being powered on
+#define DHT_INITIALIZE_TIMEOUT_MICRO_SECONDS 2000
+
+// Digital pin connected to the base of PNP transistor
+#define DHT_KEY_PIN 12
+
+// Uncomment whatever type you're using!
+//#define DHTTYPE DHT11   // DHT 11
+//#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
+#define DHTTYPE DHT21 // DHT 21 (AM2301)
+
+#define DEEP_SLEEP_MICRO_SECONDS 10000
+#define SERIAL_SPEED_BAUD 115200
+#define SERIAL_TIMEOUT_MICRO_SECONDS 200
