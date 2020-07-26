@@ -15,7 +15,7 @@
 #define MQTTSERVER "192.168.0.54"
 #define MQTTPORT 1883
 #define MQTT_CLIENT_NAME "arduino_temperature_sensor"
-#define CONNECT_MQTT_TIMEOUT_MICRO_SECONDS 5000
+#define CONNECT_MQTT_TIMEOUT_MICRO_SECONDS 5e3
 
 // Digital pin connected to the DHT sensor
 #define DHTPIN 13
@@ -23,7 +23,7 @@
 // Pin 15 can work but DHT must be disconnected during program upload.
 
 // wait timeout in micro seconds to let DHT sensor booting after being powered on
-#define DHT_INITIALIZE_TIMEOUT_MICRO_SECONDS 2000
+#define DHT_INITIALIZE_TIMEOUT_MICRO_SECONDS 2e3
 
 // Digital pin connected to the base of PNP transistor
 #define DHT_KEY_PIN 12
@@ -33,6 +33,6 @@
 //#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
 #define DHTTYPE DHT21 // DHT 21 (AM2301)
 
-#define DEEP_SLEEP_MICRO_SECONDS 10000
+#define DEEP_SLEEP_MICRO_SECONDS 30e3
 #define SERIAL_SPEED_BAUD 115200
 #define SERIAL_TIMEOUT_MICRO_SECONDS 200
