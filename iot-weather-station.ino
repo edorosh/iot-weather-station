@@ -62,7 +62,7 @@ inline void connectToWiFi()
   WiFi.begin(STASSID, STAPSK);
   WiFi.config(ip, gateway, subnet);
 
-  DRINTF("Connecting to WiFi network ");
+  DPRINTF("Connecting to WiFi network ");
   DPRINTLN(STASSID);
 
   while (WiFi.waitForConnectResult() != WL_CONNECTED)
@@ -71,7 +71,7 @@ inline void connectToWiFi()
     enterDeepSleepMode();
   }
 
-  DRINTF("Connected! IP address is ");
+  DPRINTF("Connected! IP address is ");
   DPRINTLN(WiFi.localIP().toString().c_str());
 }
 
@@ -110,7 +110,7 @@ inline void connectToMQTT()
     }
     else
     {
-      DRINTF(" failed, rc=");
+      DPRINTF(" failed, rc=");
       DPRINT(client.state());
       DPRINTLNF(" try again in 5 seconds");
 
@@ -140,11 +140,11 @@ inline void readSensorsDataAndPublish()
     enterDeepSleepMode();
   }
 
-  DRINTF("Humidity: ");
+  DPRINTF("Humidity: ");
   DPRINT(h);
-  DRINTF("%  Temperature: ");
+  DPRINTF("%  Temperature: ");
   DPRINT(t);
-  DRINTF("°C Light: ");
+  DPRINTF("°C Light: ");
   DPRINTLN(l);
 
   client.publish("weatherStation/temperature", String(t).c_str(), true);
