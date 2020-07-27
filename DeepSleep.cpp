@@ -7,8 +7,12 @@
 void deepSleep(int microSeconds)
 {
   //https://github.com/esp8266/Arduino/issues/644
+  WiFi.disconnect(true);
+  yield();
+
   WiFi.mode(WIFI_OFF);
   WiFi.forceSleepBegin();
-  delay(1);
+  yield();
+  
   ESP.deepSleep(microSeconds * 1000);
 }
