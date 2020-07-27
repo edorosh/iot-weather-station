@@ -26,9 +26,9 @@
 #include <DHT.h>
 #include "DeepSleep.h"
 #include "Serial.h"
-#include "DebugMacro.h"
 
 #include "Config.h"
+#include "DebugMacro.h"
 
 // Initialize DHT sensor.
 // Note that older versions of this library took an optional third parameter to
@@ -58,6 +58,8 @@ inline void beginSerial()
 
 inline void connectToWiFi()
 {
+  DPRINTLNF("Enabling STA mode");
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(STASSID, STAPSK);
   WiFi.config(ip, gateway, subnet);
@@ -152,7 +154,7 @@ inline void readSensorsDataAndPublish()
   client.publish("weatherStation/light", String(l).c_str(), true);
 
   // Allow client sending all the data
-  delay(100);
+  delay(200);
 }
 
 void setup()
