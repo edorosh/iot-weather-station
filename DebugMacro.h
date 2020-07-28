@@ -7,12 +7,14 @@
 
 #ifdef DEBUG
 #define DPRINT(...)    Serial.print(__VA_ARGS__)
+#define DPRINTFF(...)  Serial.printf(F(__VA_ARGS__))
 #define DPRINTLN(...)  Serial.println(__VA_ARGS__)
-#define DPRINTF(...)    Serial.print(F(__VA_ARGS__))
+#define DPRINTF(...)   Serial.print(F(__VA_ARGS__))
 #define DPRINTLNF(...) Serial.println(F(__VA_ARGS__))
 
 #else
 #define DPRINT(...)     //blank line
+#define DPRINTFF(...)   //blank line
 #define DPRINTLN(...)   //blank line
 #define DPRINTF(...)    //blank line
 #define DPRINTLNF(...)  //blank line
