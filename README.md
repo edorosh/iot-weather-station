@@ -1,7 +1,6 @@
 # MQTT Weather Station
 Monitors periodically temperature, humidity and light intersivity and sends JSON data to MQTT server. Tested on NodeMCU V3.
 ESP8266 chip enters sleep mode to save extra eneregy for a battery powered devices.
-OTA is not implemented on purpose since it doesn't work out of the box in deep sleep mode.
 
 # Circuit
 TODO
@@ -10,3 +9,6 @@ TODO
 Please copy file `Config.h.local` into `Config.h` and define your MQTT and Network credentials there before building the firmware. The firmware expectsusing static IP address to save a battery energy. OTA is not implemented on purpose since it doesn't work out of the box in a deep sleep mode.
 
 > Make sure not to commit your credentials to Git. `Config.h` is ignored in file .gitignore.
+
+# TODO
+* Enable local AP mode to change WiFi creds without firmwaring it
