@@ -39,7 +39,7 @@
 #define SERIAL_SPEED_BAUD 115200
 #define SERIAL_TIMEOUT_MICRO_SECONDS 200
 
-#define DEEP_SLEEP_TOPIC "device/name/weather_station/deep_sleep"
+#define DEEP_SLEEP_TOPIC "device/name/weatherStation/deepSleep"
 
 // Updates DHT readings every X micro seconds when in NON deep sleep mode
 #define DHT_READ_INTERVAL_NON_SLEEP_MODE 30e3

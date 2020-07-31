@@ -26,12 +26,14 @@
 #include <ArduinoOTA.h>
 #include <EEPROM.h>
 #include <DHT.h>
+#include <ArduinoJson.h>
 
 #include "DeepSleep.h"
 #include "Serial.h"
 
 #include "Config.h"
 #include "DebugMacro.h"
+#include "Version.h"
 
 // define the number of bytes we need to save deep sleep state
 #define EEPROM_SIZE 1
@@ -63,6 +65,9 @@ const long intervalDS = 1e3;
 
 // Sensors values
 float t, h, l = .0;
+
+// JSON Object settings
+const size_t capacity = JSON_OBJECT_SIZE(3);
 
 /**
  * Closes all network clients and sends the chip into Deep Sleep Mode with WAKE_RF_DEFAULT.
@@ -164,28 +169,25 @@ inline void connectToMQTT()
 
 void publishSensorsData()
 {
-  // TODO: return code check
-  if (!isnan(t))
-  {
-    client.publish("weatherStation/temperature", String(t).c_str(), true);
-    yield();
-  }
+  StaticJsonDocument<capacity> doc;
+  char JSONmessageBuffer[100];
+  char buffer[256];
 
-  if (!isnan(h))
-  {
-    client.publish("weatherStation/humidity", String(h).c_str(), true);
-    yield();
-  }
+  doc["temperature"] = !isnan(t) ? t : .0;
+  doc["humidity"] = !isnan(h) ? h : .0;
+  doc["light"] = l;
 
-  if (!isnan(l))
-  {
-    client.publish("weatherStation/light", String(l).c_str(), true);
-    yield();
-  }
-}
+  size_t n = serializeJson(doc, buffer);
 
-void resetSensorsData() {
-  t = h = l = .0;
+  DPRINTLNF("Pretty JSON message: ");
+  #ifdef DEBUG
+    serializeJsonPretty(doc, Serial);
+    DPRINTLN("");
+  #endif
+
+  if (!client.publish("weatherStation/jsonData", (const uint8_t*) buffer, n, true)) {
+    DPRINTLNF("Sending message to MQTT failed");
+  }
 }
 
 bool readSensorsData()
@@ -315,6 +317,20 @@ inline void setupOTA()
 
 void setup()
 {
+#ifdef DEBUG
+  beginSerial();
+  DPRINTLN("");
+  DPRINT(F("Sketch starting: iot-weather-station "));
+  DPRINTLN(FW_VERSION);
+  DPRINT(F("Reset reason: "));
+  DPRINTLN(ESP.getResetReason());
+  DPRINT(F("Core Version: "));
+  DPRINTLN(ESP.getCoreVersion());
+  DPRINT(F("SDK Version: "));
+  DPRINTLN(ESP.getSdkVersion());
+  DPRINTLN("");
+#endif
+
   // https://www.bakke.online/index.php/2017/05/21/reducing-wifi-power-consumption-on-esp8266-part-2/
   // Turn Wifi off until we have something to send
   WiFi.mode(WIFI_OFF);
@@ -324,10 +340,6 @@ void setup()
   // initialize EEPROM with predefined size
   EEPROM.begin(EEPROM_SIZE);
   DEEP_SLEEP_enabled = EEPROM.read(0);
-
-#ifdef DEBUG
-  beginSerial();
-#endif
 
   powerBusOn();
 
@@ -380,7 +392,6 @@ void loop()
     // save the last time you updated the DHT values
     previousMillis = currentMillis;
 
-    resetSensorsData();
     readSensorsData();
     publishSensorsData();
   }
