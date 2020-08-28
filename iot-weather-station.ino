@@ -124,9 +124,7 @@ inline void connectToWiFi()
 
 void powerBusOn()
 {
-  pinMode(DHT_KEY_PIN, OUTPUT);
-
-  DPRINTLNF("Set Power Bus pin to LOW");
+  DPRINTLNF("Set Power Bus ON by pin to LOW");
 
   // By default NodeMCU keeps +3V. Let's make it LOW
   digitalWrite(DHT_KEY_PIN, LOW);
@@ -135,8 +133,10 @@ void powerBusOn()
 
 void powerBusOff()
 {
+  DPRINTLNF("Set DHT OFF by pin to HIGH");
+
   digitalWrite(DHT_KEY_PIN, HIGH);
-  DPRINTLNF("Set DHT pin to HIGH");
+  yield();
 }
 
 inline void connectToMQTT()
@@ -330,6 +330,8 @@ void setup()
   DPRINTLN(ESP.getSdkVersion());
   DPRINTLN("");
 #endif
+
+  pinMode(DHT_KEY_PIN, OUTPUT);
 
   // https://www.bakke.online/index.php/2017/05/21/reducing-wifi-power-consumption-on-esp8266-part-2/
   // Turn Wifi off until we have something to send
