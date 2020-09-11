@@ -1,9 +1,29 @@
 /**
- * MQTT Weather Station
+ * MQTT Weather Station (ESP8266)
  * 
- * Monitors periodically temperature, humidity and light intersivity and sends JSON data to MQTT server.
- * ESP8266 chip enters sleep mode and uses static network configuration to save extra eneregy for a battery powered devices.
- * OTA is not implemented on purpose since it doesn't work out of the box in a deep sleep mode.
+ * Monitors air temperature, humidity and pressure (BME280). In addition to this it tracks lition battery voltage and
+ * send health status. The status might be check periodically and could be used as a source of online or offline states.
+ * It sends JSON data to MQTT server via single Request. In case of any of the measurements fails then the whole Request
+ * is cancelled. The JSON payload looks like:
+ * <code>
+ * {
+ *  "temperature": 22.0,
+ *  "humidity": 51.0,
+ *  "pressure" 985.0,
+ *  "voltage": 4.2,
+ *  "health": "ok"
+ * }
+ * </code>
+ * 
+ * ESP8266 chip enters into a Deep Sleep Mode and uses static network configuration to save extra energy
+ * for a battery powered device. WiFi persistence is deliberately switched off to save EEPROM write cycles and
+ * to avoid stucks. 
+ * 
+ * The Deep Sleep Mode could be switched off / on via an MQTT Topic. OTA is supported when 
+ * a Deep Sleep Mode is switched off. When Deep Sleep Mode is on then there are no measurements done in the loop().
+ * 
+ * Battery level is measured via ADC. A voltage divider is used to scale 4.2V to up to 1V.
+ * Voltage divider is switched on/off by an NPN transitor during the time of a measurement.
  * 
  * Author: Evgeny Doros
  * Email: eugene.dorosh@gmail.com
@@ -25,8 +45,9 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <EEPROM.h>
-#include <DHT.h>
 #include <ArduinoJson.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 #include "DeepSleep.h"
 #include "Serial.h"
@@ -35,16 +56,9 @@
 #include "DebugMacro.h"
 #include "Version.h"
 
-// define the number of bytes we need to save deep sleep state
-#define EEPROM_SIZE 1
-
-// Initialize DHT sensor.
-// Note that older versions of this library took an optional third parameter to
-// tweak the timings for faster processors.  This parameter is no longer needed
-// as the current DHT reading algorithm adjusts itself to work on faster procs.
-DHT dht(DHTPIN, DHTTYPE);
 WiFiClient espClient;
 PubSubClient client(espClient);
+Adafruit_BME280 bme;
 
 // static IP address of device
 IPAddress IPADDRESS_CONFIG;  
@@ -64,10 +78,11 @@ unsigned long previousDSMillis = 0;
 const long intervalDS = 1e3; 
 
 // Sensors values
-float t, h, l = .0;
+float t, h, pressure = .0;
+float volt = .0;
 
 // JSON Object settings
-const size_t capacity = JSON_OBJECT_SIZE(3);
+const size_t capacity = JSON_OBJECT_SIZE(5);
 
 /**
  * Closes all network clients and sends the chip into Deep Sleep Mode with WAKE_RF_DEFAULT.
@@ -77,11 +92,11 @@ void enterDeepSleepMode()
 {
   if (client.connected())
   {
-    DPRINTLNF("Disconnecting MQTT Client");
+    DPRINTLN(F("Disconnecting MQTT Client"));
     client.disconnect();
   }
 
-  DPRINTLNF("Entering a deep sleep mode");
+  DPRINTLN(F("Entering a deep sleep mode"));
   deepSleep(DEEP_SLEEP_MICRO_SECONDS);
 }
 
@@ -92,12 +107,15 @@ inline void beginSerial()
   Serial.println(F("Booting..."));
 }
 
+/**
+ * Coonects to WiFi in STA mode. Wakes Wifi by force. WiFi persistence is switched off.
+ */ 
 inline void connectToWiFi()
 {
   WiFi.forceSleepWake();
   yield();
 
-  DPRINTLNF("Enabling STA mode");
+  DPRINTLN(F("Enabling STA mode"));
 
   // Disable the WiFi persistence.  The ESP8266 will not load and save WiFi settings in the flash memory.
   WiFi.persistent(false);
@@ -106,7 +124,7 @@ inline void connectToWiFi()
   WiFi.begin(STASSID, STAPSK);
   WiFi.config(ip, gateway, subnet);
 
-  DPRINTFF("Connecting to WiFi network ");
+  DPRINT(F("Connecting to WiFi network "));
   DPRINTLN(STASSID);
 
   while (WiFi.waitForConnectResult() != WL_CONNECTED)
@@ -116,27 +134,8 @@ inline void connectToWiFi()
     ESP.restart();
   }
 
-  DPRINTFF("Connected! IP address is ");
-  DPRINT(WiFi.localIP().toString().c_str());
-  DPRINTFF(" mac address is ");
-  DPRINTLN(WiFi.softAPmacAddress().c_str());
-}
-
-void powerBusOn()
-{
-  DPRINTLNF("Set Power Bus ON by pin to LOW");
-
-  // By default NodeMCU keeps +3V. Let's make it LOW
-  digitalWrite(DHT_KEY_PIN, LOW);
-  yield();
-}
-
-void powerBusOff()
-{
-  DPRINTLNF("Set DHT OFF by pin to HIGH");
-
-  digitalWrite(DHT_KEY_PIN, HIGH);
-  yield();
+  DPRINT(F("Connected! IP address is "));
+  DPRINTLN(WiFi.localIP().toString().c_str());
 }
 
 inline void connectToMQTT()
@@ -151,20 +150,18 @@ inline void connectToMQTT()
     // Attempt to connect
     if (client.connect(MQTT_CLIENT_NAME))
     {
-      DPRINTLNF(" connected");
+      DPRINTLN(F(" connected"));
     }
     else
     {
-      DPRINTFF(" failed, rc=");
+      DPRINT(F(" failed, rc="));
       DPRINT(client.state());
-      DPRINTLNF(" try again in 5 seconds");
+      DPRINTLN(F(" try again in 5 seconds"));
 
       // Wait some time before retrying
       delay(CONNECT_MQTT_TIMEOUT_MICRO_SECONDS);
     }
   }
-
-  client.loop();
 }
 
 void publishSensorsData()
@@ -175,55 +172,78 @@ void publishSensorsData()
 
   doc["temperature"] = !isnan(t) ? t : .0;
   doc["humidity"] = !isnan(h) ? h : .0;
-  doc["light"] = l;
+  doc["pressure"] = !isnan(pressure) ? pressure : .0;
+  doc["voltage"] = volt;
+  doc["health"] = "ok";
 
   size_t n = serializeJson(doc, buffer);
 
-  DPRINTLNF("Pretty JSON message: ");
+  DPRINTLN(F("Pretty JSON message: "));
   #ifdef DEBUG
     serializeJsonPretty(doc, Serial);
-    DPRINTLN("");
   #endif
+  DPRINTLN("");
 
   if (!client.publish("weatherStation/jsonData", (const uint8_t*) buffer, n, true)) {
     DPRINTLNF("Sending message to MQTT failed");
   }
 }
 
-bool readSensorsData()
-{
-  // todo get rid of global variables
+float getVoltage() {
+  int times = 5;
+  int measurements[times];
+  float raw = .0;
+  float accum = .0;
 
-  // Reading temperature or humidity takes about 250 milliseconds!
-  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-  h = dht.readHumidity();
-  // Read temperature as Celsius (the default)
-  t = dht.readTemperature();
-  // Read Photoresistor value
-  l = analogRead(A0) / 1023.0f;
-
-  // Check if any reads failed and exit early (to try again).
-  // TODO: refactor with return code
-  if (isnan(h) || isnan(t))
-  {
-    DPRINTLNF("Failed to read from DHT sensor!");
-    return false;
+  for (int i=0; i < times; i++) {
+    // read sensor raw value
+    measurements[i] = analogRead(A0);
+    delay(50);
+  }
+  
+  for (int i=0; i < times; i++) {
+    accum += measurements[i];
   }
 
-  DPRINTFF("Humidity: ");
+  raw = accum / times;
+
+  DPRINT(F("RAW Voltage: "));
+  DPRINTLN(raw);
+
+  return raw;
+}
+
+bool readSensorsData()
+{
+   // Only needed in forced mode! In normal mode, you can remove the next line.
+  bme.takeForcedMeasurement(); // has no effect in normal mode
+
+  h = bme.readHumidity();
+  t = bme.readTemperature();
+  pressure = bme.readPressure() / 100.0F;
+
+  float raw = getVoltage();
+  volt=raw/1023.0;
+  volt=volt*5.62;
+
+  DPRINT(F("Humidity: "));
   DPRINT(h);
-  DPRINTFF("%  Temperature: ");
+  DPRINT(F("%  Temperature: "));
   DPRINT(t);
-  DPRINTFF("°C Light: ");
-  DPRINTLN(l);
+  DPRINT(F("°C Pressure: "));
+  DPRINT(pressure);
+  DPRINT(F("hPa Voltage: "));
+  DPRINT(volt);
+  DPRINT(F("V"));
+  DPRINTLN("");
 
   return true;
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  DPRINTFF("Message arrived [");
+  DPRINT(F("Message arrived ["));
   DPRINT(topic);
-  DPRINTFF("] ");
+  DPRINT(F("] "));
   for (int i = 0; i < length; i++) {
     DPRINT((char)payload[i]);
   }
@@ -237,25 +257,27 @@ void callback(char* topic, byte* payload, unsigned int length) {
   
   // DEBUG
   if (DEEP_SLEEP_enabled) {
-    DPRINTLNF("Deep Sleep enabled");
+    DPRINTLN(F("Deep Sleep enabled"));
   } else {
-    DPRINTLNF("Deep Sleep disabled");
+    DPRINTLN(F("Deep Sleep disabled"));
   }
 
   // save the DEEP_SLEEP state in flash memory
   if (last_DEEP_SLEEP_enabled != DEEP_SLEEP_enabled) {
-    DPRINTLNF("Writing to EEPROM deep sleep mode");
-    EEPROM.write(0, DEEP_SLEEP_enabled);
-    EEPROM.commit();
+    DPRINTLN(F("Writing to EEPROM deep sleep mode"));
+    EEPROM.write(EEPROM_DEEP_SLEEP_ADDRESS, DEEP_SLEEP_enabled);
+    if (!EEPROM.commit()) {
+      DPRINTLN(F("Error has occured while saving Deep Sleep state into EEPROM."));
+    }
     
-    DPRINTLNF("Restarting ESP ...");
+    DPRINTLN(F("Restarting ESP ..."));
     ESP.restart();
   }
 }
 
 inline void setupOTA()
 {
-  DPRINT("Enabling OTA with hostname ");
+  DPRINT(F("Enabling OTA with hostname "));
   DPRINTLN(OTAHOSTNAME);
 
   // Hostname defaults to esp8266-[ChipID]
@@ -281,7 +303,7 @@ inline void setupOTA()
   });
 
   ArduinoOTA.onEnd([]() {
-    DPRINTLN("\nEnd");
+    DPRINTLN(F("\nEnd"));
   });
 
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
@@ -292,23 +314,23 @@ inline void setupOTA()
     DPRINTF("Error[%u]: ", error);
     if (error == OTA_AUTH_ERROR)
     {
-      DPRINTLNF("Auth Failed");
+      DPRINTLN(F("Auth Failed"));
     }
     else if (error == OTA_BEGIN_ERROR)
     {
-      DPRINTLNF("Begin Failed");
+      DPRINTLN(F("Begin Failed"));
     }
     else if (error == OTA_CONNECT_ERROR)
     {
-      DPRINTLNF("Connect Failed");
+      DPRINTLN(F("Connect Failed"));
     }
     else if (error == OTA_RECEIVE_ERROR)
     {
-      DPRINTLNF("Receive Failed");
+      DPRINTLN(F("Receive Failed"));
     }
     else if (error == OTA_END_ERROR)
     {
-      DPRINTLNF("End Failed");
+      DPRINTLN(F("End Failed"));
     }
   });
 
@@ -331,8 +353,6 @@ void setup()
   DPRINTLN("");
 #endif
 
-  pinMode(DHT_KEY_PIN, OUTPUT);
-
   // https://www.bakke.online/index.php/2017/05/21/reducing-wifi-power-consumption-on-esp8266-part-2/
   // Turn Wifi off until we have something to send
   WiFi.mode(WIFI_OFF);
@@ -341,20 +361,23 @@ void setup()
 
   // initialize EEPROM with predefined size
   EEPROM.begin(EEPROM_SIZE);
-  DEEP_SLEEP_enabled = EEPROM.read(0);
+  DEEP_SLEEP_enabled = EEPROM.read(EEPROM_DEEP_SLEEP_ADDRESS);
+  DPRINT(F("Read from EEPROM: deep sleep is "));
+  DPRINTLN(DEEP_SLEEP_enabled);
 
-  powerBusOn();
-
-  dht.begin();
-
-  if (DEEP_SLEEP_enabled)
-  {
-    // Let the sensor to initialize itself
-    delay(DHT_INITIALIZE_TIMEOUT_MICRO_SECONDS);
-    readSensorsData();
-    powerBusOff();
+  if (!bme.begin(BME_ADDRESS)) {
+      DPRINTLN(F("Could not find a valid BME280 sensor, check wiring!"));
+      while (1);
   }
 
+  bme.setSampling(Adafruit_BME280::MODE_FORCED,
+                    Adafruit_BME280::SAMPLING_X1, // temperature
+                    Adafruit_BME280::SAMPLING_X1, // pressure
+                    Adafruit_BME280::SAMPLING_X1, // humidity
+                    Adafruit_BME280::FILTER_OFF   );
+
+  readSensorsData();
+  
   connectToWiFi();
   connectToMQTT();
 
@@ -373,23 +396,20 @@ void loop()
   if (DEEP_SLEEP_enabled)
   {
     unsigned long currentMillis = millis();
-    if (currentMillis - previousDSMillis >= START_STATION_TIMEOUT_IN_SLEEP_MODE)
+    if (currentMillis - previousDSMillis < START_STATION_TIMEOUT_IN_SLEEP_MODE)
     {
-      publishSensorsData();
-      enterDeepSleepMode();
-    }
-    else
-    {
-      //DPRINTLNF("SKIP Deep Sleep Loop");
-      yield();
+      //DPRINTLN(F("SKIP Deep Sleep Loop"));
       return;
     }
+
+    publishSensorsData();
+    enterDeepSleepMode();
   }
 
   ArduinoOTA.handle();
   
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= DHT_READ_INTERVAL_NON_SLEEP_MODE)
+  if (currentMillis - previousMillis >= DEEP_SLEEP_MICRO_SECONDS)
   {
     // save the last time you updated the DHT values
     previousMillis = currentMillis;

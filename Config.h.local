@@ -1,5 +1,10 @@
 // Print debug logs to Serial {TRUE/FALSE}
-#define DEBUG TRUE
+#define DEBUG FALSE
+#define BME_ADDRESS 0x76
+
+// define the number of bytes we need to save a deep sleep state
+#define EEPROM_SIZE 512
+#define EEPROM_DEEP_SLEEP_ADDRESS 0
 
 #define OTAHOSTNAME "esp8266-meteostation"
 
@@ -16,33 +21,15 @@
 // MQTT server configuration
 #define MQTTSERVER "192.168.0.54"
 #define MQTTPORT 1883
-#define MQTT_CLIENT_NAME "arduino_temperature_sensor"
+#define MQTT_CLIENT_NAME "arduino_weather_station"
 #define CONNECT_MQTT_TIMEOUT_MICRO_SECONDS 5e3
 
-// Digital pin connected to the DHT sensor
-#define DHTPIN 13
-// ESP8266 note: use pins 3, 4, 5, 12, 13 or 14 --
-// Pin 15 can work but DHT must be disconnected during program upload.
-
-// wait timeout in micro seconds to let DHT sensor booting after being powered on
-#define DHT_INITIALIZE_TIMEOUT_MICRO_SECONDS 2e3
-
-// Digital pin connected to the base of PNP transistor
-#define DHT_KEY_PIN 12
-
-// Uncomment whatever type you're using!
-//#define DHTTYPE DHT11   // DHT 11
-//#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
-#define DHTTYPE DHT21 // DHT 21 (AM2301)
-
-#define DEEP_SLEEP_MICRO_SECONDS 30e3
+#define DEEP_SLEEP_MICRO_SECONDS 300e3
 #define SERIAL_SPEED_BAUD 115200
 #define SERIAL_TIMEOUT_MICRO_SECONDS 200
 
 #define DEEP_SLEEP_TOPIC "device/name/weatherStation/deepSleep"
 
-// Updates DHT readings every X micro seconds when in NON deep sleep mode
-#define DHT_READ_INTERVAL_NON_SLEEP_MODE 30e3
 // Timeout before publishing sensors data and going into sleep mode in deep sleep mode. This timout is required to be able
 // to get MQTT message to switch sleep mode off
 #define START_STATION_TIMEOUT_IN_SLEEP_MODE 1e3

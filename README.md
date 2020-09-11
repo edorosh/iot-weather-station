@@ -1,6 +1,26 @@
 # MQTT Weather Station
-Monitors periodically temperature, humidity and light intersivity and sends JSON data to MQTT server. Tested on NodeMCU V3.
-ESP8266 chip enters sleep mode to save extra eneregy for a battery powered devices.
+Monitors air temperature, humidity and pressure (BME280). In addition to this it tracks lition battery voltage and
+sends health status. The status might be check periodically and could be used as a source of online or offline states.
+It sends JSON data to MQTT server via single Request. In case of any of the measurements fails then the whole Request
+is cancelled. The JSON payload looks like:
+```
+{
+    "temperature": 22.0,
+    "humidity": 51.0,
+    "pressure" 985.0,
+    "voltage": 4.2,
+    "health": "ok"
+}
+```
+ESP8266 chip enters into a Deep Sleep Mode and uses static network configuration to save extra energy
+for a battery powered device. WiFi persistence is deliberately switched off to save EEPROM write cycles and
+to avoid stucks. 
+
+
+The Deep Sleep Mode could be switched off / on via an MQTT Topic. OTA is supported when 
+a Deep Sleep Mode is switched off. When Deep Sleep Mode is on then there are no measurements done in the loop().
+
+Battery level is measured via ADC. A voltage divider is used to scale 4.2V to up to 1V.
 
 # Circuit
 TODO
